@@ -52,6 +52,7 @@ from service.utils import (
     messages_from_checkpoint,
     remove_tool_calls,
 )
+from service.client_tool_service import router as client_tools_router
 
 warnings.filterwarnings("ignore", category=LangChainBetaWarning)
 logger = logging.getLogger(__name__)
@@ -123,6 +124,7 @@ router = APIRouter(dependencies=[Depends(verify_bearer)])
 # AG-UI protocol endpoints inherit the same bearer auth - see service/agui.py
 router.include_router(agui_router)
 router.include_router(voice_router)   # tip 语音接口
+router.include_router(client_tools_router)
 
 @router.get("/info")
 async def info() -> ServiceMetadata:

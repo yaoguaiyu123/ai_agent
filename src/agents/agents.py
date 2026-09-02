@@ -9,6 +9,7 @@ from agents.knowledge_base_agent import kb_agent
 from agents.lazy_agent import LazyLoadingAgent
 from agents.research_assistant import research_assistant
 from schema import AgentInfo
+from agents.file_agent import file_agent
 
 DEFAULT_AGENT = "chatbot"
 
@@ -42,6 +43,10 @@ agents: dict[str, Agent] = {
     "github-mcp-agent": Agent(
         description="一个具备 MCP 工具的 GitHub Agent，用于仓库管理和开发工作流",
         graph_like=github_mcp_agent,
+    ),
+    "file_agent": Agent(
+        description="一个只能读取 客户端所选工作目录的文件助手",
+        graph_like=file_agent,
     ),
 }
 
