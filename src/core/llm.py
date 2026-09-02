@@ -1,10 +1,10 @@
+# note 模型工厂，根据模型名返回模型实例
 from functools import cache
 
 from langchain_anthropic import ChatAnthropic
 from langchain_aws import ChatBedrock
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_google_vertexai import ChatVertexAI
 from langchain_groq import ChatGroq
 from langchain_ollama import ChatOllama
 from langchain_openai import AzureChatOpenAI, ChatOpenAI
@@ -16,6 +16,7 @@ from schema.models import (
     AWSModelName,
     AzureOpenAIModelName,
     DeepseekModelName,
+    MiMoModelName,
     FakeModelName,
     GoogleModelName,
     GroqModelName,
@@ -31,6 +32,7 @@ _MODEL_TABLE = (
     | {m: m.value for m in OpenAICompatibleName}
     | {m: m.value for m in AzureOpenAIModelName}
     | {m: m.value for m in DeepseekModelName}
+    | {m: m.value for m in MiMoModelName}
     | {m: m.value for m in AnthropicModelName}
     | {m: m.value for m in GoogleModelName}
     | {m: m.value for m in VertexAIModelName}
@@ -55,18 +57,17 @@ type ModelT = (
     | ChatOpenAI
     | ChatAnthropic
     | ChatGoogleGenerativeAI
-    | ChatVertexAI
     | ChatGroq
     | ChatBedrock
     | ChatOllama
     | FakeToolModel
 )
 
-
+# tip 这里有些模型不需要设置base_url 和 api_key，因为langchain对他们的支持更好，函数底层会自动读取.env中的配置
 @cache
 def get_model(model_name: AllModelEnum, /) -> ModelT:
-    # NOTE: models with streaming=True will send tokens as they are generated
-    # if the /stream endpoint is called with stream_tokens=True (the default)
+    # 设置了 streaming=True 的模型会逐 token 实时发送生成内容
+    # 前提是调用 /stream 接口时 stream_tokens=True（默认值）
     api_model_name = _MODEL_TABLE.get(model_name)
     if not api_model_name:
         raise ValueError(f"Unsupported model: {model_name}")
@@ -88,7 +89,6 @@ def get_model(model_name: AllModelEnum, /) -> ModelT:
         if not settings.AZURE_OPENAI_API_KEY or not settings.AZURE_OPENAI_ENDPOINT:
             raise ValueError("Azure OpenAI API key and endpoint must be configured")
 
-        # GPT-5 generation is reasoning-based and rejects temperature (400); omit it.
         return AzureChatOpenAI(
             azure_endpoint=settings.AZURE_OPENAI_ENDPOINT,
             deployment_name=api_model_name,
@@ -97,6 +97,7 @@ def get_model(model_name: AllModelEnum, /) -> ModelT:
             timeout=60,
             max_retries=3,
         )
+    # tip 这里的两个国内模型也是用ChatOpenAI()，但是不显示设置base和key的话，就会去访问openAI了
     if model_name in DeepseekModelName:
         return ChatOpenAI(
             model=api_model_name,
@@ -105,24 +106,30 @@ def get_model(model_name: AllModelEnum, /) -> ModelT:
             openai_api_base="https://api.deepseek.com",
             openai_api_key=settings.DEEPSEEK_API_KEY,
         )
+    if model_name in MiMoModelName:
+        return ChatOpenAI(
+            model=api_model_name,
+            streaming=True,
+            base_url=settings.MIMO_BASE_URL,
+            api_key=settings.MIMO_API_KEY,
+            extra_body={
+                "thinking": {
+                    "type": "disabled",
+                }
+            },
+        )
     if model_name in AnthropicModelName:
         if model_name == AnthropicModelName.SONNET_5:
-            # Claude Sonnet 5 rejects non-default sampling parameters (temperature,
-            # top_p, top_k) with a 400 error -- adaptive thinking is on by default
-            # instead. See https://docs.anthropic.com/en/docs/about-claude/models
             return ChatAnthropic(model_name=api_model_name, streaming=True)
         return ChatAnthropic(model_name=api_model_name, temperature=0.5, streaming=True)
     if model_name in GoogleModelName:
         return ChatGoogleGenerativeAI(model=api_model_name, temperature=0.5, streaming=True)
-    if model_name in VertexAIModelName:
-        return ChatVertexAI(model=api_model_name, temperature=0.5, streaming=True)
     if model_name in GroqModelName:
         if model_name == GroqModelName.GPT_OSS_SAFEGUARD_20B:
             return ChatGroq(model=api_model_name, temperature=0.0)  # type: ignore[call-arg]
         return ChatGroq(model=api_model_name, temperature=0.5)  # type: ignore[call-arg]
     if model_name in AWSModelName:
         if model_name == AWSModelName.BEDROCK_SONNET:
-            # Sonnet 5 rejects non-default sampling params (400); omit temperature.
             return ChatBedrock(model=api_model_name)
         return ChatBedrock(model=api_model_name, temperature=0.5)
     if model_name in OllamaModelName:
@@ -136,11 +143,8 @@ def get_model(model_name: AllModelEnum, /) -> ModelT:
             chat_ollama = ChatOllama(model=settings.OLLAMA_MODEL, temperature=0.5)
         return chat_ollama
     if model_name in OpenRouterModelName:
-        # Without an explicit key the openai SDK falls back to OPENAI_API_KEY,
-        # which would send that key to openrouter.ai.
         if not settings.OPENROUTER_API_KEY:
             raise ValueError("OpenRouter API key must be configured")
-
         return ChatOpenAI(
             model=api_model_name,
             temperature=0.5,

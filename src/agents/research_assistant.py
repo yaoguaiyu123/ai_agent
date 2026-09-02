@@ -16,20 +16,15 @@ from core import get_model, settings
 
 
 class AgentState(MessagesState, total=False):
-    """`total=False` is PEP589 specs.
-
-    documentation: https://typing.readthedocs.io/en/latest/spec/typeddict.html#totality
-    """
 
     safety: SafeguardOutput
     remaining_steps: RemainingSteps
 
-
-web_search = DuckDuckGoSearchResults(name="WebSearch")
+# DuckDuckGo 搜索
+web_search = DuckDuckGoSearchResults(name="WebSearch", max_results=5,backend="bing",)   
 tools = [web_search, calculator]
 
-# Add weather tool if API key is set
-# Register for an API key at https://openweathermap.org/api/
+# 如果设置了对应的apikey，可以启用天气查询工具
 if settings.OPENWEATHERMAP_API_KEY:
     wrapper = OpenWeatherMapAPIWrapper(
         openweathermap_api_key=settings.OPENWEATHERMAP_API_KEY.get_secret_value()
@@ -38,16 +33,14 @@ if settings.OPENWEATHERMAP_API_KEY:
 
 current_date = datetime.now().strftime("%B %d, %Y")
 instructions = f"""
-    You are a helpful research assistant with the ability to search the web and use other tools.
-    Today's date is {current_date}.
+    你是一个有用的研究助手，能够搜索网页和使用其他工具。
+    今天是 {current_date}。
 
-    NOTE: THE USER CAN'T SEE THE TOOL RESPONSE.
+    注意：用户看不到工具的返回内容。
 
-    A few things to remember:
-    - Please include markdown-formatted links to any citations used in your response. Only include one
-    or two citations per response unless more are needed. ONLY USE LINKS RETURNED BY THE TOOLS.
-    - Use calculator tool with numexpr to answer math questions. The user does not understand numexpr,
-      so for the final response, use human readable format - e.g. "300 * 200", not "(300 \\times 200)".
+    请牢记以下几点：
+    - 回答中请使用 markdown 格式的链接引用来源。除非必要，每个回答只包含一两个引用。仅使用工具返回的链接。
+    - 使用 calculator 工具配合 numexpr 来回答数学问题。用户不了解 numexpr，所以最终回答请使用人类可读的格式 — 例如 "300 * 200"，而不是 "(300 \\times 200)"。
     """
 
 
@@ -81,7 +74,6 @@ async def acall_model(state: AgentState, config: RunnableConfig) -> AgentState:
                 )
             ]
         }
-    # We return a list, because this will get added to the existing list
     return {"messages": [response]}
 
 
@@ -96,10 +88,19 @@ async def block_unsafe_content(state: AgentState, config: RunnableConfig) -> Age
     return {"messages": [format_safety_message(safety)]}
 
 
-# Define the graph
+# 定义图
 agent = StateGraph(AgentState)
 agent.add_node("model", acall_model)
-agent.add_node("tools", ToolNode(tools))
+agent.add_node(
+    "tools",
+    ToolNode(
+        tools,
+        handle_tool_errors=(
+            "联网搜索暂时失败，请告诉用户搜索服务不可用，"
+            "并根据已有知识尽量回答。"
+        ),
+    ),
+)
 agent.add_node("guard_input", safeguard_input)
 agent.add_node("block_unsafe_content", block_unsafe_content)
 agent.set_entry_point("guard_input")
@@ -119,10 +120,7 @@ agent.add_conditional_edges(
     "guard_input", check_safety, {"unsafe": "block_unsafe_content", "safe": "model"}
 )
 
-# Always END after blocking unsafe content
 agent.add_edge("block_unsafe_content", END)
-
-# Always run "model" after "tools"
 agent.add_edge("tools", "model")
 
 

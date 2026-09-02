@@ -240,6 +240,7 @@ async def invoke(user_input: UserInput, agent_id: str = DEFAULT_AGENT) -> ChatMe
         raise HTTPException(status_code=500, detail="Unexpected error")
 
 
+# tip SSE
 async def message_generator(
     user_input: StreamInput, agent_id: str = DEFAULT_AGENT
 ) -> AsyncGenerator[str, None]:
@@ -347,8 +348,14 @@ async def message_generator(
                     # So we only print non-empty content.
                     yield f"data: {json.dumps({'type': 'token', 'content': convert_message_content_to_string(content)})}\n\n"
     except Exception as e:
-        logger.error(f"Error in message generator: {e}")
-        yield f"data: {json.dumps({'type': 'error', 'content': 'Internal server error'})}\n\n"
+        logger.exception("Error in message generator")
+
+        yield (
+            f"data: {json.dumps({
+                'type': 'error',
+                'content': '服务端访问外部网络超时'
+            })}\n\n"
+        )
     finally:
         yield "data: [DONE]\n\n"
 
@@ -373,7 +380,7 @@ def _sse_response_example() -> dict[int | str, Any]:
         }
     }
 
-
+# tip SSE
 @router.post(
     "/{agent_id}/stream",
     response_class=StreamingResponse,

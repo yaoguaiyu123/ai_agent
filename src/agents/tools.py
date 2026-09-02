@@ -6,17 +6,16 @@ from langchain_core.tools import BaseTool, tool
 
 
 def calculator_func(expression: str) -> str:
-    """Calculates a math expression using numexpr.
+    """使用 numexpr 计算数学表达式
 
-    Useful for when you need to answer questions about math using numexpr.
-    This tool is only for math questions and nothing else. Only input
-    math expressions.
+        适用于需要借助 numexpr 回答数学问题的场景
+        此工具仅用于数学问题，不处理其他内容。只接受数学表达式作为输入
 
-    Args:
-        expression (str): A valid numexpr formatted math expression.
+        Args:
+            expression (str): 一个符合 numexpr 格式的数学表达式
 
-    Returns:
-        str: The result of the math expression.
+        Returns:
+            str: 数学表达式的计算结果
     """
 
     try:

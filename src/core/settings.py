@@ -28,6 +28,7 @@ from schema.models import (
     OpenRouterModelName,
     Provider,
     VertexAIModelName,
+    MiMoModelName,
 )
 
 
@@ -80,30 +81,47 @@ class Settings(BaseSettings):
 
     AUTH_SECRET: SecretStr | None = None
 
+    # 文字模型api key
     OPENAI_API_KEY: SecretStr | None = None
     DEEPSEEK_API_KEY: SecretStr | None = None
     ANTHROPIC_API_KEY: SecretStr | None = None
     GOOGLE_API_KEY: SecretStr | None = None
     GOOGLE_APPLICATION_CREDENTIALS: SecretStr | None = None
     GROQ_API_KEY: SecretStr | None = None
+    MIMO_API_KEY: SecretStr | None = None
+    MIMO_BASE_URL: str = "https://api.xiaomimimo.com/v1"
+
+    # MiMo语音配置
+    VOICE_STT_PROVIDER: str | None = None
+    VOICE_STT_MODEL: str = "mimo-v2.5-asr"
+    VOICE_STT_LANGUAGE: str = "auto"
+
+    VOICE_TTS_PROVIDER: str | None = None
+    VOICE_TTS_MODEL: str = "mimo-v2.5-tts"
+    VOICE_TTS_VOICE: str = "mimo_default"
+    VOICE_TTS_FORMAT: str = "wav"
+    VOICE_TTS_STREAM: bool = False
+
+
     USE_AWS_BEDROCK: bool = False
     OLLAMA_MODEL: str | None = None
     OLLAMA_BASE_URL: str | None = None
     USE_FAKE_MODEL: bool = False
     OPENROUTER_API_KEY: SecretStr | None = None
 
-    # If DEFAULT_MODEL is None, it will be set in model_post_init
+
+    # 如果 DEFAULT_MODEL 为 None，会在 model_post_init 中设置
     DEFAULT_MODEL: AllModelEnum | None = None  # type: ignore[assignment]
     AVAILABLE_MODELS: set[AllModelEnum] = set()  # type: ignore[assignment]
 
-    # Set openai compatible api, mainly used for proof of concept
+    # 设置 OpenAI 兼容 API，主要用于概念验证
     COMPATIBLE_MODEL: str | None = None
     COMPATIBLE_API_KEY: SecretStr | None = None
     COMPATIBLE_BASE_URL: str | None = None
 
     OPENWEATHERMAP_API_KEY: SecretStr | None = None
 
-    # MCP Configuration
+    # MCP 配置
     GITHUB_PAT: SecretStr | None = None
     MCP_GITHUB_SERVER_URL: str = "https://api.githubcopilot.com/mcp/"
 
@@ -166,12 +184,13 @@ class Settings(BaseSettings):
             Provider.FAKE: self.USE_FAKE_MODEL,
             Provider.AZURE_OPENAI: self.AZURE_OPENAI_API_KEY,
             Provider.OPENROUTER: self.OPENROUTER_API_KEY,
+            Provider.MIMO: self.MIMO_API_KEY,
         }
         active_keys = [k for k, v in api_keys.items() if v]
         if not active_keys:
             raise ValueError("At least one LLM API key must be provided.")
 
-        # USE_FAKE_MODEL must win the default even when real provider keys are present.
+        # 即使配置了真实的 API Key，USE_FAKE_MODEL 也必须优先作为默认模型
         if self.USE_FAKE_MODEL and self.DEFAULT_MODEL is None:
             self.DEFAULT_MODEL = FakeModelName.FAKE
 
@@ -189,6 +208,10 @@ class Settings(BaseSettings):
                     if self.DEFAULT_MODEL is None:
                         self.DEFAULT_MODEL = DeepseekModelName.DEEPSEEK_V4_FLASH
                     self.AVAILABLE_MODELS.update(set(DeepseekModelName))
+                case Provider.MIMO:   # 小米mimo模型
+                    if self.DEFAULT_MODEL is None:
+                        self.DEFAULT_MODEL = MiMoModelName.MIMO_V25
+                    self.AVAILABLE_MODELS.update(set(MiMoModelName))
                 case Provider.ANTHROPIC:
                     if self.DEFAULT_MODEL is None:
                         self.DEFAULT_MODEL = AnthropicModelName.HAIKU_45
@@ -257,20 +280,5 @@ class Settings(BaseSettings):
 
     def is_dev(self) -> bool:
         return self.MODE == "dev"
-
-# mimo语音模型
-MIMO_API_KEY: SecretStr | None = None
-MIMO_BASE_URL: str = "https://api.xiaomimimo.com/v1"
-
-VOICE_STT_PROVIDER: str | None = None
-VOICE_STT_MODEL: str = "mimo-v2.5-asr"
-VOICE_STT_LANGUAGE: str = "auto"
-
-VOICE_TTS_PROVIDER: str | None = None
-VOICE_TTS_MODEL: str = "mimo-v2.5-tts"
-VOICE_TTS_VOICE: str = "mimo_default"
-VOICE_TTS_FORMAT: str = "wav"
-VOICE_TTS_STREAM: bool = False
-
 
 settings = Settings()

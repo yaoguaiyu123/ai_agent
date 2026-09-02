@@ -1,12 +1,14 @@
-"""AG-UI protocol endpoint for the agent service.
+"""用于 agent 服务的 AG-UI 协议端点
 
-Exposes any agent in the service over the AG-UI protocol (https://docs.ag-ui.com)
-so it can be used with AG-UI compatible frontends like CopilotKit. The
-LangGraph -> AG-UI event translation is handled by the official `ag-ui-langgraph`
-package; this module only wires it into the service's agent registry, auth, and
-tracing.
 
-See docs/AGUI.md for usage, including how to connect a client.
+通过 AG-UI 协议（
+https://docs.ag-ui.com
+）将服务中的任意 agent 暴露出来，使其可与 AG-UI 兼容的前端（
+如 CopilotKit）配合使用。LangGraph 到 AG-UI 的事件转换由官方 ag-ui-langgraph 包
+处理；本模块仅负责将其接入服务的 agent 注册表、鉴权和链路追踪
+
+
+具体用法（包括如何连接客户端）请参阅 docs/AGUI.md
 """
 
 import logging
