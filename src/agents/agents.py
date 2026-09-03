@@ -45,7 +45,7 @@ agents: dict[str, Agent] = {
         graph_like=github_mcp_agent,
     ),
     "file_agent": Agent(
-        description="一个只能读取 客户端所选工作目录的文件助手",
+        description="一个只能访问客户端所选工作目录的文件助手",
         graph_like=file_agent,
     ),
 }

@@ -11,6 +11,8 @@ ClientToolName = Literal[
     "append_text_file",
     "delete_file",
     "move_file",
+    "create_file",
+    "create_directory",
 ]
 
 ClientToolStatus = Literal[

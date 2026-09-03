@@ -351,6 +351,61 @@ async def move_file(
     )
 
 
+@tool
+async def create_file(
+    runtime: ToolRuntime,
+    path: str,
+) -> str:
+    """在客户端工作目录中创建一个空文件。
+
+    如果目标已经存在，操作会失败，不会覆盖已有文件或目录。
+    目标文件的父目录必须已经存在。
+
+    Args:
+        path: 相对于客户端工作目录的新文件路径。
+    """
+
+    safe_path = _validate_relative_path(
+        path,
+        allow_current_directory=False,
+    )
+
+    return await _call_client_tool(
+        runtime,
+        "create_file",
+        {
+            "path": safe_path,
+        },
+    )
+
+
+@tool
+async def create_directory(
+    runtime: ToolRuntime,
+    path: str,
+) -> str:
+    """在客户端工作目录中创建一个文件夹。
+
+    如果目标已经存在，操作会失败，不会覆盖已有文件或目录。
+    目标文件夹的父目录必须已经存在。
+
+    Args:
+        path: 相对于客户端工作目录的新文件夹路径。
+    """
+
+    safe_path = _validate_relative_path(
+        path,
+        allow_current_directory=False,
+    )
+
+    return await _call_client_tool(
+        runtime,
+        "create_directory",
+        {
+            "path": safe_path,
+        },
+    )
+
 file_tools = [
     list_directory,
     read_text_file,
@@ -358,4 +413,6 @@ file_tools = [
     append_text_file,
     delete_file,
     move_file,
+    create_file,
+    create_directory,
 ]
