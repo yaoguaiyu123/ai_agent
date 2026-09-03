@@ -2,7 +2,12 @@ import asyncio
 import json
 from collections.abc import AsyncGenerator
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import (
+    APIRouter,
+    HTTPException,
+    Request,
+    status,
+)
 from fastapi.responses import StreamingResponse
 
 from client_tools.client_tool_bridge import (
@@ -25,7 +30,7 @@ async def client_tool_event_generator(
     client_id: str,
     request: Request,
 ) -> AsyncGenerator[str, None]:
-    """保持一个 SSE 连接，将文件工具请求发送给 Qt。"""
+    """保持 SSE 连接，将文件工具请求发送给 Qt。"""
 
     connection: ClientToolConnection = (
         client_tool_bridge.connect(client_id)
@@ -33,12 +38,13 @@ async def client_tool_event_generator(
 
     try:
         while not await request.is_disconnected():
-            tool_request = await client_tool_bridge.next_request(
-                connection,
-                timeout=15.0,
+            tool_request = (
+                await client_tool_bridge.next_request(
+                    connection,
+                    timeout=15.0,
+                )
             )
 
-            # 当前连接已经被新连接替换。
             if tool_request is None:
                 if connection.closed.is_set():
                     break
@@ -46,22 +52,24 @@ async def client_tool_event_generator(
                 if await request.is_disconnected():
                     break
 
-                # SSE 心跳。
+                # SSE 心跳
                 yield ": ping\n\n"
                 continue
 
-            # 请求可能已经在等待期间超时。
+            # 请求可能已经超时。
             if not client_tool_bridge.is_pending(
                 tool_request.request_id
             ):
                 continue
 
-            # 连接在取出请求后断开，重新放回当前连接。
+            # 连接在取出请求后断开。
             if (
                 connection.closed.is_set()
                 or await request.is_disconnected()
             ):
-                client_tool_bridge.requeue(tool_request)
+                client_tool_bridge.requeue(
+                    tool_request
+                )
                 break
 
             data = tool_request.model_dump(
@@ -76,14 +84,20 @@ async def client_tool_event_generator(
             try:
                 yield payload
 
-            except (asyncio.CancelledError, GeneratorExit):
-                # StreamingResponse 因客户端断开而取消生成器时，
-                # 避免已经取出的请求永久丢失。
-                client_tool_bridge.requeue(tool_request)
+            except (
+                asyncio.CancelledError,
+                GeneratorExit,
+            ):
+                # 避免请求因为 SSE 断开而丢失。
+                client_tool_bridge.requeue(
+                    tool_request
+                )
                 raise
 
     finally:
-        client_tool_bridge.disconnect(connection)
+        client_tool_bridge.disconnect(
+            connection
+        )
 
 
 @router.get(
@@ -97,7 +111,10 @@ async def client_tool_events(
     """供 Qt 客户端建立文件工具 SSE 通道。"""
 
     return StreamingResponse(
-        client_tool_event_generator(client_id, request),
+        client_tool_event_generator(
+            client_id,
+            request,
+        ),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
@@ -121,7 +138,8 @@ async def client_tool_result(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=(
                 "没有找到对应的客户端工具请求，"
-                "请求可能已超时或 client_id 不匹配"
+                "请求可能已经超时，"
+                "或者 client_id 不匹配"
             ),
         )
 
