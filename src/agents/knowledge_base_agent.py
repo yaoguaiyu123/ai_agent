@@ -15,24 +15,24 @@ from core import get_model, settings
 logger = logging.getLogger(__name__)
 
 
-# Define the state
+# 定义状态
 class AgentState(MessagesState, total=False):
-    """State for Knowledge Base agent."""
+    """知识库 Agent 的状态。"""
 
     remaining_steps: RemainingSteps
     retrieved_documents: list[dict[str, Any]]
     kb_documents: str
 
 
-# Create the retriever
+# 创建 Retriever
 def get_kb_retriever():
-    """Create and return a Knowledge Base retriever instance."""
-    # Get the Knowledge Base ID from environment
+    """创建并返回一个 Knowledge Base Retriever 实例。"""
+    # 从环境变量获取 Knowledge Base ID
     kb_id = os.environ.get("AWS_KB_ID", "")
     if not kb_id:
-        raise ValueError("AWS_KB_ID environment variable must be set")
+        raise ValueError("必须设置 AWS_KB_ID 环境变量")
 
-    # Create the retriever with the specified Knowledge Base ID
+    # 使用指定的 Knowledge Base ID 创建 Retriever
     retriever = AmazonKnowledgeBasesRetriever(
         knowledge_base_id=kb_id,
         retrieval_config={
@@ -45,33 +45,33 @@ def get_kb_retriever():
 
 
 def wrap_model(model: BaseChatModel) -> RunnableSerializable[AgentState, AIMessage]:
-    """Wrap the model with a system prompt for the Knowledge Base agent."""
+    """用知识库 Agent 的系统提示词包装模型。"""
 
     def create_system_message(state):
-        base_prompt = """You are a helpful assistant that provides accurate information based on retrieved documents.
+        base_prompt = """你是一个有用的助手，能够基于检索到的文档提供准确的信息。
 
-        You will receive a query along with relevant documents retrieved from a knowledge base. Use these documents to inform your response.
+        你会收到一个查询以及从知识库中检索到的相关文档。请使用这些文档来辅助你的回答。
 
-        Follow these guidelines:
-        1. Base your answer primarily on the retrieved documents
-        2. If the documents contain the answer, provide it clearly and concisely
-        3. If the documents are insufficient, state that you don't have enough information
-        4. Never make up facts or information not present in the documents
-        5. Always cite the source documents when referring to specific information
-        6. If the documents contradict each other, acknowledge this and explain the different perspectives
+        遵循以下指南：
+        1. 主要基于检索到的文档来回答
+        2. 如果文档中包含答案，请清晰简洁地提供
+        3. 如果文档不足，请说明你没有足够的信息
+        4. 不要编造文档中没有的事实或信息
+        5. 引用具体信息时请注明源文档
+        6. 如果文档内容相互矛盾，请指出并解释不同的观点
 
-        Format your response in a clear, conversational manner. Use markdown formatting when appropriate.
+        请以清晰、对话式的方式组织你的回答。适当使用 markdown 格式。
         """
 
-        # Check if documents were retrieved
+        # 检查是否检索到了文档
         if "kb_documents" in state:
-            # Append document information to the system prompt
-            document_prompt = f"\n\nI've retrieved the following documents that may be relevant to the query:\n\n{state['kb_documents']}\n\nPlease use these documents to inform your response to the user's query. Only use information from these documents and clearly indicate when you are unsure."
+            # 将文档信息追加到系统提示词中
+            document_prompt = f"\n\n我检索到了以下可能与查询相关的文档：\n\n{state['kb_documents']}\n\n请使用这些文档来回答用户的查询。仅使用这些文档中的信息，不确定时请明确说明。"
             return [SystemMessage(content=base_prompt + document_prompt)] + state["messages"]
         else:
-            # No documents were retrieved
+            # 未检索到文档
             no_docs_prompt = (
-                "\n\nNo relevant documents were found in the knowledge base for this query."
+                "\n\n在知识库中未找到与该查询相关的文档。"
             )
             return [SystemMessage(content=base_prompt + no_docs_prompt)] + state["messages"]
 
@@ -83,24 +83,24 @@ def wrap_model(model: BaseChatModel) -> RunnableSerializable[AgentState, AIMessa
 
 
 async def retrieve_documents(state: AgentState, config: RunnableConfig) -> AgentState:
-    """Retrieve relevant documents from the knowledge base."""
-    # Get the last human message
+    """从知识库中检索相关文档。"""
+    # 获取最后一条用户消息
     human_messages = [msg for msg in state["messages"] if isinstance(msg, HumanMessage)]
     if not human_messages:
-        # Include messages from original state
+        # 保留原始状态中的消息
         return {"messages": [], "retrieved_documents": []}
 
-    # Use the last human message as the query
+    # 使用最后一条用户消息作为查询
     query = cast(str, human_messages[-1].content)
 
     try:
-        # Initialize the retriever
+        # 初始化 Retriever
         retriever = get_kb_retriever()
 
-        # Retrieve documents
+        # 检索文档
         retrieved_docs = await retriever.ainvoke(query)
 
-        # Create document summaries for the state
+        # 为状态创建文档摘要
         document_summaries = []
         for i, doc in enumerate(retrieved_docs, 1):
             summary = {
@@ -112,40 +112,40 @@ async def retrieve_documents(state: AgentState, config: RunnableConfig) -> Agent
             }
             document_summaries.append(summary)
 
-        logger.info(f"Retrieved {len(document_summaries)} documents for query: {query[:50]}...")
+        logger.info(f"查询: {query[:50]}... 检索到 {len(document_summaries)} 份文档")
 
         return {"retrieved_documents": document_summaries, "messages": []}
 
     except Exception as e:
-        logger.error(f"Error retrieving documents: {str(e)}")
+        logger.error(f"检索文档时出错: {str(e)}")
         return {"retrieved_documents": [], "messages": []}
 
 
 async def prepare_augmented_prompt(state: AgentState, config: RunnableConfig) -> AgentState:
-    """Prepare a prompt augmented with retrieved document content."""
-    # Get retrieved documents
+    """准备包含检索文档内容的增强提示词。"""
+    # 获取检索到的文档
     documents = state.get("retrieved_documents", [])
 
     if not documents:
         return {"messages": []}
 
-    # Format retrieved documents for the model
+    # 将检索到的文档格式化供模型使用
     formatted_docs = "\n\n".join(
         [
-            f"--- Document {i + 1} ---\n"
-            f"Source: {doc.get('source', 'Unknown')}\n"
-            f"Title: {doc.get('title', 'Unknown')}\n\n"
+            f"--- 文档 {i + 1} ---\n"
+            f"来源: {doc.get('source', 'Unknown')}\n"
+            f"标题: {doc.get('title', 'Unknown')}\n\n"
             f"{doc.get('content', '')}"
             for i, doc in enumerate(documents)
         ]
     )
 
-    # Store formatted documents in the state
+    # 将格式化后的文档存入状态
     return {"kb_documents": formatted_docs, "messages": []}
 
 
 async def acall_model(state: AgentState, config: RunnableConfig) -> AgentState:
-    """Generate a response based on the retrieved documents."""
+    """基于检索到的文档生成回答。"""
     m = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))
     model_runnable = wrap_model(m)
 
@@ -154,21 +154,21 @@ async def acall_model(state: AgentState, config: RunnableConfig) -> AgentState:
     return {"messages": [response]}
 
 
-# Define the graph
+# 定义 Graph
 agent = StateGraph(AgentState)
 
-# Add nodes
+# 添加节点
 agent.add_node("retrieve_documents", retrieve_documents)
 agent.add_node("prepare_augmented_prompt", prepare_augmented_prompt)
 agent.add_node("model", acall_model)
 
-# Set entry point
+# 设置入口
 agent.set_entry_point("retrieve_documents")
 
-# Add edges to define the flow
+# 添加边定义流程
 agent.add_edge("retrieve_documents", "prepare_augmented_prompt")
 agent.add_edge("prepare_augmented_prompt", "model")
 agent.add_edge("model", END)
 
-# Compile the agent
+# 编译 Agent
 kb_agent = agent.compile()

@@ -279,8 +279,28 @@ async def message_generator(
                         for interrupt in updates:
                             new_messages.append(AIMessage(content=interrupt.value))
                         continue
+
                     updates = updates or {}
+
+                    if isinstance(updates, dict):
+                        status_text = updates.get("status")
+
+                        if status_text:
+                            yield (
+                                "data: "
+                                + json.dumps(
+                                    {
+                                        "type": "status",
+                                        "content": str(status_text),
+                                        "node": str(node),
+                                    },
+                                    ensure_ascii=False,
+                                )
+                                + "\n\n"
+                            )
+
                     update_messages = updates.get("messages", [])
+                    
                     # special cases for using langgraph-supervisor library
                     if "supervisor" in node or "sub-agent" in node:
                         # the only tools that come from the actual agent are the handoff and handback tools

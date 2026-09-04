@@ -10,6 +10,7 @@ from agents.lazy_agent import LazyLoadingAgent
 from agents.research_assistant import research_assistant
 from schema import AgentInfo
 from agents.file_agent import file_agent
+from agents.combined_agent import combined_agent
 
 DEFAULT_AGENT = "chatbot"
 
@@ -47,6 +48,10 @@ agents: dict[str, Agent] = {
     "file_agent": Agent(
         description="一个只能访问客户端所选工作目录的文件助手",
         graph_like=file_agent,
+    ),
+    "combined_agent": Agent(
+        description="负责规划、并行调度多个专业 Agent 并汇总结果",
+        graph_like=combined_agent,
     ),
 }
 
