@@ -101,6 +101,13 @@ class Settings(BaseSettings):
     VOICE_TTS_VOICE: str = "mimo_default"
     VOICE_TTS_FORMAT: str = "wav"
     VOICE_TTS_STREAM: bool = False
+    
+    # 本地知识库配置
+    KB_SOURCE_DIR: str = "/home/vboxuser/data/knowledge"
+    KB_VECTORSTORE_DIR: str = "/home/vboxuser/data/chroma"
+    KB_COLLECTION_NAME: str = "local_knowledge_base"
+    KB_EMBEDDING_MODEL: str = "BAAI/bge-small-zh-v1.5"
+    KB_TOP_K: int = 3
 
 
     USE_AWS_BEDROCK: bool = False

@@ -9,6 +9,7 @@ from langchain_core.runnables import RunnableConfig, RunnableLambda, RunnableSer
 from langchain_core.runnables.base import RunnableSequence
 from langgraph.graph import END, MessagesState, StateGraph
 from langgraph.managed import RemainingSteps
+from knowledge_base.local_store import get_local_retriever
 
 from core import get_model, settings
 
@@ -26,22 +27,7 @@ class AgentState(MessagesState, total=False):
 
 # 创建 Retriever
 def get_kb_retriever():
-    """创建并返回一个 Knowledge Base Retriever 实例。"""
-    # 从环境变量获取 Knowledge Base ID
-    kb_id = os.environ.get("AWS_KB_ID", "")
-    if not kb_id:
-        raise ValueError("必须设置 AWS_KB_ID 环境变量")
-
-    # 使用指定的 Knowledge Base ID 创建 Retriever
-    retriever = AmazonKnowledgeBasesRetriever(
-        knowledge_base_id=kb_id,
-        retrieval_config={
-            "vectorSearchConfiguration": {
-                "numberOfResults": 3,
-            }
-        },
-    )
-    return retriever
+    return get_local_retriever()
 
 
 def wrap_model(model: BaseChatModel) -> RunnableSerializable[AgentState, AIMessage]:
@@ -64,7 +50,7 @@ def wrap_model(model: BaseChatModel) -> RunnableSerializable[AgentState, AIMessa
         """
 
         # 检查是否检索到了文档
-        if "kb_documents" in state:
+        if state.get("kb_documents"):
             # 将文档信息追加到系统提示词中
             document_prompt = f"\n\n我检索到了以下可能与查询相关的文档：\n\n{state['kb_documents']}\n\n请使用这些文档来回答用户的查询。仅使用这些文档中的信息，不确定时请明确说明。"
             return [SystemMessage(content=base_prompt + document_prompt)] + state["messages"]
@@ -91,7 +77,8 @@ async def retrieve_documents(state: AgentState, config: RunnableConfig) -> Agent
         return {"messages": [], "retrieved_documents": []}
 
     # 使用最后一条用户消息作为查询
-    query = cast(str, human_messages[-1].content)
+    content = human_messages[-1].content
+    query = content if isinstance(content, str) else str(content)
 
     try:
         # 初始化 Retriever
@@ -116,9 +103,9 @@ async def retrieve_documents(state: AgentState, config: RunnableConfig) -> Agent
 
         return {"retrieved_documents": document_summaries, "messages": []}
 
-    except Exception as e:
-        logger.error(f"检索文档时出错: {str(e)}")
-        return {"retrieved_documents": [], "messages": []}
+    except Exception:
+        logger.exception("本地知识库检索失败")
+        raise
 
 
 async def prepare_augmented_prompt(state: AgentState, config: RunnableConfig) -> AgentState:
@@ -127,7 +114,10 @@ async def prepare_augmented_prompt(state: AgentState, config: RunnableConfig) ->
     documents = state.get("retrieved_documents", [])
 
     if not documents:
-        return {"messages": []}
+        return {
+            "kb_documents": "",
+            "messages": [],
+        }
 
     # 将检索到的文档格式化供模型使用
     formatted_docs = "\n\n".join(
@@ -146,7 +136,15 @@ async def prepare_augmented_prompt(state: AgentState, config: RunnableConfig) ->
 
 async def acall_model(state: AgentState, config: RunnableConfig) -> AgentState:
     """基于检索到的文档生成回答。"""
-    m = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))
+    configurable = config.get("configurable") or {}
+
+    m = get_model(
+        configurable.get(
+            "model",
+            settings.DEFAULT_MODEL,
+        )
+    )
+    
     model_runnable = wrap_model(m)
 
     response = await model_runnable.ainvoke(state, config)

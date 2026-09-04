@@ -38,7 +38,7 @@ agents: dict[str, Agent] = {
         graph_like=research_assistant,
     ),
     "knowledge-base-agent": Agent(
-        description="一个使用 Amazon Bedrock Knowledge Base 的检索增强生成 Agent",
+        description="使用服务端本地文件夹和 Chroma 向量库的检索增强生成 Agent",
         graph_like=kb_agent,
     ),
     "github-mcp-agent": Agent(
